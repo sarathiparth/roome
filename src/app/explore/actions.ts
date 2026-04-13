@@ -42,10 +42,25 @@ export async function getExploreFeed(filters?: {
   })
   const swipedIds = swiped.map((s) => s.swipedId)
 
+  // IDs blocked (both directions — I blocked them OR they blocked me)
+  const blocksGiven = await prisma.block.findMany({
+    where: { blockerId: user.id },
+    select: { blockedId: true },
+  })
+  const blocksReceived = await prisma.block.findMany({
+    where: { blockedId: user.id },
+    select: { blockerId: true },
+  })
+  const blockedIds = [
+    ...blocksGiven.map((b) => b.blockedId),
+    ...blocksReceived.map((b) => b.blockerId),
+  ]
+
   // Build dynamic where clause from filters
   const where: Record<string, unknown> = {
-    id: { notIn: [...swipedIds, user.id] },
+    id: { notIn: [...swipedIds, ...blockedIds, user.id] },
     onboardingCompleted: true,
+    isSuspended: false,
   }
 
   if (filters?.city) where.city = { contains: filters.city, mode: "insensitive" }

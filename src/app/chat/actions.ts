@@ -5,6 +5,7 @@ import { createClient } from "@/utils/supabase/server"
 import { prisma } from "@/lib/prisma"
 import { validate, sendMessageSchema, markReadSchema } from "@/lib/validation"
 import { logger } from "@/lib/logger"
+import { moderateMessage } from "@/lib/safety"
 
 // ─── Get all matches with last message ────────────────────────────────────────
 export async function getMatches() {
@@ -132,6 +133,11 @@ export async function sendMessage(matchId: string, content: string) {
     matchId,
     senderId: user.id,
     contentLength: v.data.content.length,
+  })
+
+  // Background safety scan — non-blocking, flags stored in DB
+  moderateMessage(message.id, matchId, user.id, v.data.content).catch((err) => {
+    logger.error("moderation_scan_failed", { messageId: message.id, error: String(err) })
   })
 
   return { message }

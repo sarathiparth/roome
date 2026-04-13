@@ -47,6 +47,19 @@ model Profile {
   messagesSent         Message[]
   vibeResponse         VibeResponse?
   notifications        Notification[]
+  reportsGiven         Report[]             @relation("reporter")
+  reportsReceived      Report[]             @relation("reported")
+  blocks               Block[]              @relation("blocker")
+  blockedBy            Block[]              @relation("blocked")
+  verifications        Verification[]
+  chatFlags            ChatFlag[]
+
+  // Trust & Safety fields
+  trustScore           Int        @default(50) @map("trust_score")
+  isVerified           Boolean    @default(false) @map("is_verified")
+  isSuspended          Boolean    @default(false) @map("is_suspended")
+  suspendedUntil       DateTime?  @map("suspended_until")
+  reportCount          Int        @default(0) @map("report_count")
 
   @@map("profiles")
 }
@@ -115,6 +128,8 @@ model Match {
   profileA  Profile   @relation("matchA", fields: [userA], references: [id], onDelete: Cascade)
   profileB  Profile   @relation("matchB", fields: [userB], references: [id], onDelete: Cascade)
   messages  Message[]
+  reports   Report[]
+  chatFlags ChatFlag[]
 
   @@unique([userA, userB])
   @@map("matches")
@@ -130,6 +145,7 @@ model Message {
   content   String
   readAt    DateTime? @map("read_at")
   createdAt DateTime  @default(now()) @map("created_at")
+  chatFlags ChatFlag[]
 
   @@map("messages")
 }
@@ -182,4 +198,76 @@ model MlFeedback {
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@map("ml_feedback")
+}
+
+// ─── Reports ──────────────────────────────────────────────────────────────────
+model Report {
+  id          String    @id @default(uuid()) @db.Uuid
+  reporterId  String    @map("reporter_id") @db.Uuid
+  reporter    Profile   @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedId  String    @map("reported_id") @db.Uuid
+  reported    Profile   @relation("reported", fields: [reportedId], references: [id], onDelete: Cascade)
+  type        String    // harassment | scam | inappropriate | fake_profile | spam | underage | other
+  context     String    // profile | chat | listing
+  description String?
+  evidenceUrls String[] @default([]) @map("evidence_urls")
+  matchId     String?   @map("match_id") @db.Uuid
+  match       Match?    @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  status      String    @default("pending") // pending | reviewing | resolved | dismissed
+  adminNotes  String?   @map("admin_notes")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  resolvedAt  DateTime? @map("resolved_at")
+
+  @@map("reports")
+}
+
+// ─── Blocks ───────────────────────────────────────────────────────────────────
+model Block {
+  id        String   @id @default(uuid()) @db.Uuid
+  blockerId String   @map("blocker_id") @db.Uuid
+  blocker   Profile  @relation("blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String   @map("blocked_id") @db.Uuid
+  blocked   Profile  @relation("blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([blockerId, blockedId])
+  @@map("blocks")
+}
+
+// ─── Verifications ────────────────────────────────────────────────────────────
+model Verification {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  user        Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String    // identity | work_email | education_email | phone | social_media
+  status      String    @default("pending") // pending | verified | failed | expired
+  provider    String?   // stripe_identity | email_otp | google_oauth
+  providerRef String?   @map("provider_ref")
+  verifiedAt  DateTime? @map("verified_at")
+  expiresAt   DateTime? @map("expires_at")
+  metadata    Json      @default("{}")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([userId, type])
+  @@map("verifications")
+}
+
+// ─── Chat Flags ───────────────────────────────────────────────────────────────
+model ChatFlag {
+  id             String    @id @default(uuid()) @db.Uuid
+  messageId      String    @map("message_id") @db.Uuid
+  message        Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  matchId        String    @map("match_id") @db.Uuid
+  match          Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  senderId       String    @map("sender_id") @db.Uuid
+  sender         Profile   @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  flagType       String    @map("flag_type") // harassment | scam | explicit | spam | personal_info | off_platform
+  severity       String    @default("low") // low | medium | high | critical
+  flaggedContent String    @map("flagged_content")
+  actionTaken    String    @default("none") @map("action_taken") // none | warned | message_hidden | user_suspended | user_banned
+  autoFlagged    Boolean   @default(true) @map("auto_flagged")
+  reviewedAt     DateTime? @map("reviewed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@map("chat_flags")
 }
