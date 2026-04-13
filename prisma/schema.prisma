@@ -156,3 +156,30 @@ model Notification {
 
   @@map("notifications")
 }
+
+// ─── Compatibility Score Cache ────────────────────────────────────────────────
+// Cached ML compatibility scores. Invalidated when either user updates profile.
+model CompatibilityScore {
+  userA         String   @map("user_a") @db.Uuid
+  userB         String   @map("user_b") @db.Uuid
+  score         Decimal  @db.Decimal(5, 2)
+  sectionScores Json     @default("{}") @map("section_scores")
+  computedAt    DateTime @default(now()) @map("computed_at")
+
+  @@id([userA, userB])
+  @@map("compatibility_scores")
+}
+
+// ─── ML Feedback ──────────────────────────────────────────────────────────────
+// Logs swipe decisions for the continuous learning pipeline.
+// "pass on high-score" → negative sample for model retraining.
+model MlFeedback {
+  id             String   @id @default(uuid()) @db.Uuid
+  swiperId       String   @map("swiper_id") @db.Uuid
+  swipedId       String   @map("swiped_id") @db.Uuid
+  action         String   // like | pass | super
+  predictedScore Decimal? @map("predicted_score") @db.Decimal(5, 2)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("ml_feedback")
+}

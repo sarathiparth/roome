@@ -135,9 +135,12 @@ export default function OnboardingPage() {
         occupation, college, company, city, country, instagram, bio,
         moveInDate: moveInDate || undefined,
         moveInFlexible: isFlexible,
-        sleepSchedule, cleanliness, smoking, drinking,
-        roommatePref: roommateGender,
-        housingIntent,
+        sleepSchedule: sleepSchedule as "early" | "night" | "flexible" | undefined || undefined,
+        cleanliness: cleanliness as "spotless" | "tidy" | "relaxed" | undefined || undefined,
+        smoking: smoking as "yes" | "outside" | "no" | undefined || undefined,
+        drinking: drinking as "yes" | "sometimes" | "no" | undefined || undefined,
+        roommatePref: roommateGender as "same_exclusive" | "same_prefer" | "any" | undefined || undefined,
+        housingIntent: housingIntent as "have_room" | "join_room" | "team_up" | undefined || undefined,
         propLocation, propType, propRoomType, propFurnishing,
         occCurrent: parseInt(occCurrent),
         occTotal: parseInt(occTotal),
@@ -146,6 +149,15 @@ export default function OnboardingPage() {
         deposit: priceDeposit ? parseInt(priceDeposit) : undefined,
         propMoveInDate: propMoveInDate || undefined,
         amenities,
+        coRoommates: roommateDetails.length > 0
+          ? roommateDetails.map(r => ({
+              name: r.name,
+              age: r.age ? parseInt(r.age) : undefined,
+              occupation: r.occupation || undefined,
+              bio: r.bio || undefined,
+              instagram: r.instagram || undefined,
+            }))
+          : undefined,
       })
       // Server action redirects on success
     } catch (err) {

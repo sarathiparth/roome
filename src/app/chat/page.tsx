@@ -1,13 +1,50 @@
 "use client"
 
-import React from "react"
+import React, { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { PEOPLE, PersonExtended } from "@/app/explore/page"
 import { NavigationBar } from "@/components/navigation-bar"
-import { Search } from "lucide-react"
+import { Search, MessageCircle } from "lucide-react"
+import { getMatches } from "@/app/chat/actions"
+import { motion } from "motion/react"
+
+interface MatchEntry {
+  id: string
+  createdAt: Date
+  otherUser: {
+    id: string
+    fullName: string | null
+    avatarUrl: string | null
+    city: string | null
+  }
+  lastMessage: {
+    content: string
+    createdAt: Date
+    senderId: string
+    readAt: Date | null
+  } | null
+  unreadCount: number
+}
 
 export default function ChatPage() {
-  const matches = [...PEOPLE, ...PEOPLE].slice(0, 4);
+  const [matches, setMatches] = useState<MatchEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      const result = await getMatches()
+      if (result.matches) {
+        setMatches(result.matches as unknown as MatchEntry[])
+      }
+      if ("currentUserId" in result) {
+        setCurrentUserId(result.currentUserId as string)
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const totalUnread = matches.reduce((a, m) => a + m.unreadCount, 0)
 
   return (
     <main className="fixed inset-0 bg-white flex items-center justify-center">
@@ -23,60 +60,131 @@ export default function ChatPage() {
               <Search className="h-4 w-4 text-white/70" />
             </div>
           </div>
-          <p className="text-white/50 text-[13px] mt-1">You have {matches.length} new matches</p>
+          {totalUnread > 0 && (
+            <p className="text-emerald-400 text-[13px] mt-1 font-medium">
+              {totalUnread} unread message{totalUnread > 1 ? "s" : ""}
+            </p>
+          )}
+          {totalUnread === 0 && matches.length > 0 && (
+            <p className="text-white/50 text-[13px] mt-1">All caught up</p>
+          )}
         </div>
 
         {/* Chat List */}
         <div className="flex-1 overflow-y-auto pt-2 pb-32" style={{ scrollbarWidth: "none" }}>
-          {matches.map((person, i) => (
-            <ChatItem key={`chat-${i}`} person={person} index={i} />
-          ))}
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="h-8 w-8 border-2 border-white/20 border-t-white/70 rounded-full"
+              />
+              <span className="text-white/40 text-sm">Loading chats...</span>
+            </div>
+          ) : matches.length === 0 ? (
+            <EmptyChats />
+          ) : (
+            matches.map((match) => (
+              <ChatItem key={match.id} match={match} currentUserId={currentUserId} />
+            ))
+          )}
         </div>
       </div>
     </main>
   )
 }
 
-function ChatItem({ person, index }: { person: PersonExtended; index: number }) {
+function ChatItem({ match, currentUserId }: { match: MatchEntry; currentUserId: string | null }) {
   const router = useRouter()
-  const isUnread = index < 2; // Mock unread statuses
-  const lastMessages = [
-    "Hey! I saw you love reading too 📚",
-    "Are you still looking for a place near Koramangala?",
-    "Haha yeah, that sounds perfect to me.",
-    "Let me know if you want to visit the flat this weekend!"
-  ];
-  const msg = lastMessages[index % lastMessages.length];
+  const isUnread = match.unreadCount > 0
+  const other = match.otherUser
+  const lastMsg = match.lastMessage
+
+  // Format relative time
+  const timeAgo = lastMsg?.createdAt
+    ? formatRelativeTime(new Date(lastMsg.createdAt))
+    : formatRelativeTime(new Date(match.createdAt))
+
+  // Preview text
+  const preview = lastMsg
+    ? lastMsg.senderId === currentUserId
+      ? `You: ${lastMsg.content}`
+      : lastMsg.content
+    : "Say hello! 👋"
 
   return (
-    <div 
-      onClick={() => router.push(`/chat/${person.id}`)}
-      className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-white/[0.03] transition-colors border-b border-white/5"
+    <div
+      onClick={() => router.push(`/chat/${match.id}`)}
+      className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-white/[0.03] transition-colors border-b border-white/5 active:bg-white/[0.06]"
     >
       {/* Avatar */}
       <div className="relative">
-        <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white/10">
-          <img src={person.images[0]} alt={person.name} className="w-full h-full object-cover object-top" />
+        <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white/10 bg-white/5 flex items-center justify-center">
+          {other.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={other.avatarUrl} alt={other.fullName ?? ""} className="w-full h-full object-cover object-top" />
+          ) : (
+            <span className="text-white/40 text-lg font-bold">
+              {(other.fullName ?? "?")[0]?.toUpperCase()}
+            </span>
+          )}
         </div>
         {isUnread && (
-          <div className="absolute top-0 right-0 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-[#080808]" />
+          <div className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-emerald-400 rounded-full border-2 border-[#080808] flex items-center justify-center">
+            <span className="text-[10px] font-bold text-black">{match.unreadCount}</span>
+          </div>
         )}
       </div>
 
       {/* Message Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between mb-1">
-          <h3 className={`text-[16px] truncate ${isUnread ? 'text-white font-bold' : 'text-white/90 font-medium'}`}>
-            {person.name.split(" ")[0]}
+          <h3 className={`text-[16px] truncate ${isUnread ? "text-white font-bold" : "text-white/90 font-medium"}`}>
+            {other.fullName?.split(" ")[0] ?? "Unknown"}
           </h3>
-          <span className={`text-[11px] shrink-0 ${isUnread ? 'text-emerald-400 font-medium' : 'text-white/40'}`}>
-            {isUnread ? '2m ago' : '1d ago'}
+          <span className={`text-[11px] shrink-0 ml-2 ${isUnread ? "text-emerald-400 font-medium" : "text-white/40"}`}>
+            {timeAgo}
           </span>
         </div>
-        <p className={`text-[13px] truncate ${isUnread ? 'text-white/90 font-medium' : 'text-white/50 font-normal'}`}>
-          {msg}
+        <p className={`text-[13px] truncate ${isUnread ? "text-white/90 font-medium" : "text-white/50 font-normal"}`}>
+          {preview}
         </p>
       </div>
     </div>
   )
+}
+
+function EmptyChats() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center h-full gap-5 px-8 text-center"
+    >
+      <div className="h-20 w-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+        <MessageCircle className="h-8 w-8 text-white/30" />
+      </div>
+      <div className="space-y-2">
+        <h2 className="text-xl font-bold text-white">No matches yet</h2>
+        <p className="text-white/40 text-sm leading-relaxed">
+          When you and someone both like each other, you&apos;ll see them here.
+          Keep exploring!
+        </p>
+      </div>
+    </motion.div>
+  )
+}
+
+function formatRelativeTime(date: Date): string {
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return "now"
+  if (diffMins < 60) return `${diffMins}m`
+  if (diffHours < 24) return `${diffHours}h`
+  if (diffDays < 7) return `${diffDays}d`
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }

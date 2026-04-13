@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, useRef } from "react"
+import React, { useState, useCallback, useRef, useEffect } from "react"
 import { motion, AnimatePresence, useMotionValue, useTransform, useMotionValueEvent } from "motion/react"
 import { useRouter } from "next/navigation"
 import {
@@ -8,13 +8,14 @@ import {
   Users, Home, CheckCircle2, AlertTriangle, ChevronRight, ChevronLeft,
   Moon, Coffee, Leaf, Dumbbell, Music2, BookOpen, Cigarette,
   Wine, Sun, Laptop, Utensils, PawPrint, Minimize2, TrendingUp,
-  Wallet, UserCheck, Scale, ShieldCheck, Clock, CalendarDays, Dog, User
+  Wallet, UserCheck, Scale, ShieldCheck, Clock, CalendarDays, Dog, User, Loader2
 } from "lucide-react"
 import { NavigationBar } from "@/components/navigation-bar"
 import { BentoGrid, type BentoItem } from "@/components/ui/bento-grid"
 import { Person } from "@/app/explore/types"
 import { MorphingCardStack } from "@/components/ui/morphing-card-stack"
 import { HoverBorderCard } from "@/components/ui/hover-border-gradient"
+import { getExploreFeed, recordSwipe } from "@/app/explore/actions"
 
 // ─── Extended Person type with multi-image + detailed profile ──────────────────
 export interface PersonExtended extends Omit<Person, "imageUrl"> {
@@ -59,158 +60,67 @@ const LIFESTYLE_ICONS: Record<string, React.ReactNode> = {
   "Homebody": <Home className="h-4 w-4" />,
 }
 
-// ─── Extended mock data ────────────────────────────────────────────────────────
-export const PEOPLE: PersonExtended[] = [
-  {
-    id: 1, name: "Priya Sharma", age: 23,
-    occupation: "UX Designer", company: "Flipkart",
-    city: "Bangalore", area: "HSR Layout",
-    bio: "A perfect flat vibe for me is calm, clean, and quiet. I love cooking on weekends and reading before bed.",
-    imageUrl: "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800&auto=format&fit=crop&q=90",
-    images: [
-      "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=800&auto=format&fit=crop&q=90",
-    ],
-    matchScore: 94, tags: ["Early Bird", "Clean Freak", "Veggie", "Reader"],
-    budget: 18000, intent: "join_room",
-    sleepScore: 20, cleanScore: 95, socialScore: 40,
-    moveIn: "Immediate",
-    pets: "Dog mom — golden retriever named Biscuit 🐕",
-    petImageUrl: "https://images.unsplash.com/photo-1552053831-71594a27632d?w=800&auto=format&fit=crop&q=80",
-    hobbies: ["Cooking", "Reading", "Yoga", "Painting"],
-    dailyRoutine: "Up by 6 AM, morning yoga, cook breakfast, work 9-6, evening walk with Biscuit, read before bed by 10 PM.",
-    guestPolicy: "Occasional friends on weekends — never unannounced.",
-    financialStyle: "Splits bills on time, prefers UPI. Tracks shared expenses in a spreadsheet.",
-    conflictStyle: "Prefers calm, face-to-face conversations. Needs 10 min to process before discussing.",
-    dietaryPreference: "Vegetarian — keeps a strictly veggie kitchen.",
-    prompts: [
-      { question: "A typical Sunday", answer: "Meal prepping, a bit of reading, and maybe catching a movie." },
-      { question: "We'll get along if", answer: "You value an organized space and don't mind shared cooking sometimes!" }
-    ],
-    lifestyle: ["Non-smoker", "Occasional drinks", "No pets", "Vegetarian"],
-  },
-  {
-    id: 2, name: "Arjun Mehta", age: 26,
-    occupation: "Software Engineer", company: "Razorpay",
-    city: "Bangalore", area: "Koramangala",
-    bio: "Startup guy who codes late but keeps things clean. Looking for someone who gets the hustle.",
-    imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&auto=format&fit=crop&q=90",
-    images: [
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800&auto=format&fit=crop&q=90",
-    ],
-    matchScore: 87, tags: ["Night Owl", "Tidy", "Social", "Gamer"],
-    budget: 22000, intent: "join_room",
-    sleepScore: 80, cleanScore: 75, socialScore: 70,
-    moveIn: "March 2024",
-    hobbies: ["Gaming", "Cooking", "Cycling", "Hackathons"],
-    dailyRoutine: "Work 10 AM-8 PM, game or code side projects until midnight. Clean weekends.",
-    guestPolicy: "Weekend gaming nights with friends. Gives heads-up always.",
-    financialStyle: "Reliable with rent, prefers Venmo/UPI. Split groceries monthly.",
-    conflictStyle: "Direct but respectful. Prefers texting to resolve small things.",
-    dietaryPreference: "Non-vegetarian, loves cooking experimental dishes.",
-    prompts: [
-      { question: "My most controversial opinion", answer: "Pineapple absolutely belongs on pizza." },
-      { question: "Ideal roommate vibe", answer: "Someone who respects quiet hours but is down for weekend gaming sessions." }
-    ],
-    lifestyle: ["Smoker", "Social drinker", "Late nights", "Gamer"],
-  },
-  {
-    id: 3, name: "Anika Verma", age: 24,
-    occupation: "Product Manager", company: "CRED",
-    city: "Bangalore", area: "Indiranagar",
-    bio: "Into yoga, minimal living, and having a beautiful home. Seeking a roommate who appreciates calm spaces.",
-    imageUrl: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&auto=format&fit=crop&q=90",
-    images: [
-      "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1501004318855-b174af8f8024?w=800&auto=format&fit=crop&q=90",
-    ],
-    matchScore: 81, tags: ["Yoga Lover", "Minimalist", "Quiet", "Plant Parent"],
-    budget: 25000, intent: "team_up",
-    sleepScore: 30, cleanScore: 92, socialScore: 45,
-    moveIn: "April 2024",
-    pets: "Two rescue cats — Leo & Luna 🐱",
-    petImageUrl: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=800&auto=format&fit=crop&q=80",
-    hobbies: ["Yoga", "Interior Design", "Gardening", "Journaling"],
-    dailyRoutine: "5:30 AM yoga, green smoothie, work 9-6, evening journaling and plants, bed by 10.",
-    guestPolicy: "Once a month dinner parties, otherwise quiet.",
-    financialStyle: "Budget-conscious, tracks every expense. Prefers splitting everything equally.",
-    conflictStyle: "Non-confrontational. Writes down concerns and discusses calmly over tea.",
-    dietaryPreference: "Plant-based vegan. Okay with others cooking non-veg.",
-    prompts: [
-      { question: "My sanctuary is", answer: "A sunlit room filled with plants and good music." },
-      { question: "Must-haves in an apartment", answer: "Good natural light and a proper kitchen." }
-    ],
-    lifestyle: ["Non-smoker", "Teetotaler", "Yoga", "Plant parent"],
-  },
-  {
-    id: 4, name: "Rohan Das", age: 27,
-    occupation: "Data Scientist", company: "Meesho",
-    city: "Bangalore", area: "Whitefield",
-    bio: "Remote worker, loves music and cooking experimental dishes. Need a chill roommate who gets the WFH life.",
-    imageUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&auto=format&fit=crop&q=90",
-    images: [
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1556909114-44e3e70034e2?w=800&auto=format&fit=crop&q=90",
-    ],
-    matchScore: 76, tags: ["WFH", "Foodie", "Chill", "Musician"],
-    budget: 20000, intent: "join_room",
-    sleepScore: 65, cleanScore: 60, socialScore: 55,
-    moveIn: "Flexible",
-    hobbies: ["Music Production", "Cooking", "Cafe hopping", "Photography"],
-    dailyRoutine: "Work 10-7 from home, music production in the evening, late dinner, bed by midnight.",
-    guestPolicy: "Rare guests. Mostly solo, occasionally has a friend over for jam sessions.",
-    financialStyle: "Reliable with rent. Prefers splitting utilities based on usage.",
-    conflictStyle: "Avoids confrontation, prefers texting about issues.",
-    dietaryPreference: "Foodie — cooks everything from butter chicken to sushi.",
-    prompts: [
-      { question: "I'm looking for a roommate who", answer: "Is also working from home and understands the dynamic." },
-      { question: "On weekends you'll find me", answer: "Trying out a new cafe or producing music in my room." }
-    ],
-    lifestyle: ["WFH", "Musician", "Social drinker"],
-  },
-  {
-    id: 5, name: "Kavya Reddy", age: 25,
-    occupation: "Content Strategist", company: "Swiggy",
-    city: "Bangalore", area: "JP Nagar",
-    bio: "Bookworm by night, strategist by day. Good vibes only. Need someone who respects quiet evenings.",
-    imageUrl: "https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=800&auto=format&fit=crop&q=90",
-    images: [
-      "https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=800&auto=format&fit=crop&q=90",
-      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&auto=format&fit=crop&q=90",
-    ],
-    matchScore: 89, tags: ["Bookworm", "Early Bird", "Homebody", "Coffee Addict"],
-    budget: 16000, intent: "join_room",
-    sleepScore: 15, cleanScore: 85, socialScore: 30,
-    moveIn: "Immediate",
-    pets: "A betta fish named Kafka 🐟",
-    petImageUrl: "https://images.unsplash.com/photo-1522069169874-c58ec4b76be5?w=800&auto=format&fit=crop&q=80",
-    hobbies: ["Reading", "Writing", "Coffee brewing", "Podcasts"],
-    dailyRoutine: "Up at 6, filter coffee, write for an hour, work 9-6, read until 10 PM.",
-    guestPolicy: "Rarely has guests. Values her alone time deeply.",
-    financialStyle: "Very budget-conscious. Student loan repayments. Always on time.",
-    conflictStyle: "Thoughtful and diplomatic. Writes a note if something is bothering her.",
-    dietaryPreference: "Mostly vegetarian, occasionally eats eggs.",
-    prompts: [
-      { question: "First thing I do in the morning", answer: "Make a strong cup of filter coffee." },
-      { question: "I can teach you how to", answer: "Optimize your reading habits and brew the perfect coffee." }
-    ],
-    lifestyle: ["Early Riser", "Coffee addict", "Reader"],
-  },
-]
+// ─── DB Profile → PersonExtended Mapper ────────────────────────────────────────
+// Maps real DB profiles (from getExploreFeed) to the UI's PersonExtended shape.
+function mapDbProfileToPersonExtended(p: any): PersonExtended {
+  const sleepMap: Record<string, number> = { early: 20, flexible: 50, night: 80 }
+  const cleanMap: Record<string, number> = { spotless: 95, tidy: 70, relaxed: 35 }
+  const socialMap: Record<string, number> = { yes: 70, sometimes: 50, no: 25 }
+
+  // Build lifestyle tags from profile fields
+  const lifestyle: string[] = []
+  if (p.smoking === "no") lifestyle.push("Non-smoker")
+  else if (p.smoking === "yes") lifestyle.push("Smoker")
+  if (p.drinking === "yes") lifestyle.push("Social drinker")
+  else if (p.drinking === "sometimes") lifestyle.push("Occasional drinks")
+  else if (p.drinking === "no") lifestyle.push("Teetotaler")
+  if (p.sleepSchedule === "early") lifestyle.push("Early Riser")
+  else if (p.sleepSchedule === "night") lifestyle.push("Night Owl")
+
+  // Calculate age from DOB
+  const age = p.dob ? Math.floor((Date.now() - new Date(p.dob).getTime()) / 31557600000) : 0
+
+  // Get avatar or placeholder
+  const avatarUrl = p.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(p.fullName || "?")}`
+
+  return {
+    id: p.id,
+    name: p.fullName || "Unknown",
+    age,
+    occupation: p.occupation || "—",
+    company: p.company || p.college || "",
+    city: p.city || "—",
+    area: p.listing?.location || p.city || "",
+    bio: p.bio || "No bio yet.",
+    imageUrl: avatarUrl,
+    images: p.listing?.photos?.length ? p.listing.photos : [avatarUrl],
+    matchScore: p.matchScore ?? 50,
+    tags: (p.tags?.length ? p.tags : lifestyle).slice(0, 5),
+    budget: p.listing?.rent ?? p.budget ?? 0,
+    intent: (p.housingIntent || "join_room") as "join_room" | "have_room" | "team_up",
+    sleepScore: sleepMap[p.sleepSchedule as string] ?? 50,
+    cleanScore: cleanMap[p.cleanliness as string] ?? 50,
+    socialScore: socialMap[p.drinking as string] ?? 40,
+    moveIn: p.moveInFlexible ? "Flexible" : (p.moveInDate ? new Date(p.moveInDate).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "Flexible"),
+    pets: p.hasPet ? (p.petDescription || "Has a pet 🐾") : undefined,
+    hobbies: p.tags?.slice(0, 4) || [],
+    dailyRoutine: p.sleepSchedule === "early" ? "Early riser — up by 6 AM, structured routine." : p.sleepSchedule === "night" ? "Night owl — most productive after dark." : "Flexible schedule — goes with the flow.",
+    guestPolicy: "—",
+    financialStyle: "—",
+    conflictStyle: "—",
+    dietaryPreference: "—",
+    lifestyle,
+  }
+}
 
 // ─── Feed Generator ────────────────────────────────────────────────────────────
 type ExtFeedItem = { id: string; type: "person"; person: PersonExtended }
 
-function generateFeed(people: PersonExtended[]): ExtFeedItem[] {
-  return people.map(p => ({ id: `p${p.id}`, type: "person", person: p }));
+function generateFeedFromProfiles(profiles: any[]): ExtFeedItem[] {
+  return profiles.map(p => {
+    const person = mapDbProfileToPersonExtended(p)
+    return { id: String(person.id), type: "person" as const, person }
+  })
 }
 
 // ─── Color helper ──────────────────────────────────────────────────────────────
@@ -1356,6 +1266,103 @@ function EmptyState({ onReset }: { onReset: () => void }) {
   )
 }
 
+// ─── Match Celebration Overlay ─────────────────────────────────────────────────
+function MatchCelebration({ name, onContinue, onChat }: { name: string; onContinue: () => void; onChat: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center"
+      style={{ backdropFilter: "blur(20px)", background: "rgba(0,0,0,0.8)" }}
+    >
+      <motion.div
+        initial={{ scale: 0.5, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.1 }}
+        className="flex flex-col items-center gap-6 text-center px-8"
+      >
+        {/* Animated hearts */}
+        <motion.div
+          animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="relative"
+        >
+          <div className="h-24 w-24 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-400 flex items-center justify-center shadow-[0_0_60px_rgba(52,211,153,0.4)]"
+          >
+            <Heart className="h-12 w-12 text-white fill-white" />
+          </div>
+          {/* Sparkle particles */}
+          {[...Array(6)].map((_, i) => (
+            <motion.div
+              key={i}
+              initial={{ scale: 0, opacity: 1 }}
+              animate={{ scale: [0, 1.5, 0], opacity: [1, 1, 0], x: [0, (i % 2 ? 1 : -1) * (30 + i * 15)], y: [0, -(20 + i * 12)] }}
+              transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
+              className="absolute top-1/2 left-1/2 w-2 h-2 rounded-full bg-emerald-300"
+            />
+          ))}
+        </motion.div>
+
+        <motion.h1
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="text-3xl font-black text-white"
+        >
+          It&apos;s a Match! 🎉
+        </motion.h1>
+        <motion.p
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.45 }}
+          className="text-white/60 text-sm"
+        >
+          You and {name.split(" ")[0]} both liked each other!
+        </motion.p>
+
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="flex gap-3 mt-4"
+        >
+          <button
+            onClick={onChat}
+            className="px-8 py-3 rounded-2xl bg-white text-black font-bold text-sm shadow-xl hover:scale-105 transition-transform"
+          >
+            Send a Message 💬
+          </button>
+          <button
+            onClick={onContinue}
+            className="px-6 py-3 rounded-2xl bg-white/10 text-white border border-white/20 font-bold text-sm hover:bg-white/20 transition-colors"
+          >
+            Keep Swiping
+          </button>
+        </motion.div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+// ─── Loading State ──────────────────────────────────────────────────────────────
+function LoadingState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-5">
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+      >
+        <Loader2 className="h-10 w-10 text-white/30" />
+      </motion.div>
+      <div className="space-y-2 text-center">
+        <h2 className="text-lg font-bold text-white">Finding your people...</h2>
+        <p className="text-white/40 text-xs">ML compatibility engine scoring profiles</p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Explore Page ─────────────────────────────────────────────────────────
 function getItemName(item: ExtFeedItem): string {
   if (item.type === "person") return item.person.name
@@ -1364,20 +1371,54 @@ function getItemName(item: ExtFeedItem): string {
 
 export default function ExplorePage() {
   const router = useRouter()
-  const [queue, setQueue] = useState<ExtFeedItem[]>(() => generateFeed(PEOPLE))
+  const [queue, setQueue] = useState<ExtFeedItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [lastAction, setLastAction] = useState<{ name: string; dir: string } | null>(null)
   const [showToast, setShowToast] = useState(false)
+  const [matchInfo, setMatchInfo] = useState<{ name: string; matchId: string } | null>(null)
+
+  // Fetch real profiles from DB with ML scoring
+  const loadFeed = useCallback(async () => {
+    setLoading(true)
+    try {
+      const result = await getExploreFeed()
+      if (result.profiles && result.profiles.length > 0) {
+        setQueue(generateFeedFromProfiles(result.profiles))
+      } else {
+        setQueue([])
+      }
+    } catch (err) {
+      console.error("Failed to load feed:", err)
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { loadFeed() }, [loadFeed])
 
   const topItem = queue[0]
   const secondItem = queue[1]
 
-  const handleSwipe = useCallback((dir: "left" | "right" | "super") => {
+  const handleSwipe = useCallback(async (dir: "left" | "right" | "super") => {
     if (!topItem) return
+    const person = topItem.person
     const label = dir === "right" ? "❤️ Liked" : dir === "super" ? "⚡ Super Like" : "✕ Passed"
-    setLastAction({ name: getItemName(topItem), dir: label })
+    setLastAction({ name: person.name, dir: label })
     setShowToast(true)
     setTimeout(() => setShowToast(false), 2000)
     setQueue(q => q.slice(1))
+
+    // Record swipe in DB (fire-and-forget for speed, but check for match)
+    const direction = dir === "right" ? "like" : dir === "super" ? "super" : "pass"
+    try {
+      const result = await recordSwipe(String(person.id), direction)
+      if ("matched" in result && result.matched && "matchId" in result && result.matchId) {
+        // Trigger match celebration!
+        setMatchInfo({ name: person.name, matchId: result.matchId })
+        window.navigator?.vibrate?.([30, 50, 80, 50, 30])
+      }
+    } catch (err) {
+      console.error("Swipe error:", err)
+    }
   }, [topItem])
 
   return (
@@ -1411,9 +1452,13 @@ export default function ExplorePage() {
         <div className="absolute inset-0 pb-[80px] pt-0 flex justify-center overflow-hidden">
           <div className="relative w-full h-full">
             <AnimatePresence>
-              {queue.length === 0 ? (
+              {loading ? (
+                <motion.div key="loading" className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <LoadingState />
+                </motion.div>
+              ) : queue.length === 0 ? (
                 <motion.div key="empty" className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <EmptyState onReset={() => setQueue(generateFeed(PEOPLE))} />
+                  <EmptyState onReset={loadFeed} />
                 </motion.div>
               ) : (
                 <>
@@ -1445,6 +1490,20 @@ export default function ExplorePage() {
                 {lastAction.dir} {lastAction.name.split(" ")[0]}
               </div>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Match Celebration */}
+        <AnimatePresence>
+          {matchInfo && (
+            <MatchCelebration
+              name={matchInfo.name}
+              onChat={() => {
+                router.push(`/chat/${matchInfo.matchId}`)
+                setMatchInfo(null)
+              }}
+              onContinue={() => setMatchInfo(null)}
+            />
           )}
         </AnimatePresence>
 
