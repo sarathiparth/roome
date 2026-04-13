@@ -21,107 +21,108 @@ export async function saveOnboardingProfile(data: OnboardingProfileInput) {
 
   const d = v.data
 
-  await prisma.$transaction(async (tx) => {
-    // 1. Upsert profile
-    await tx.profile.upsert({
-      where: { id: user.id },
-      create: {
-        id: user.id,
-        fullName: user.user_metadata?.full_name || "",
-        occupation: d.occupation,
-        college: d.college,
-        company: d.company,
-        city: d.city,
-        country: d.country,
-        instagram: d.instagram,
-        bio: d.bio,
-        moveInDate: d.moveInDate ? new Date(d.moveInDate) : null,
-        moveInFlexible: d.moveInFlexible ?? false,
-        sleepSchedule: d.sleepSchedule,
-        cleanliness: d.cleanliness,
-        smoking: d.smoking,
-        drinking: d.drinking,
-        roommatePref: d.roommatePref,
-        housingIntent: d.housingIntent,
-        onboardingCompleted: true,
-      },
-      update: {
-        occupation: d.occupation,
-        college: d.college,
-        company: d.company,
-        city: d.city,
-        country: d.country,
-        instagram: d.instagram,
-        bio: d.bio,
-        moveInDate: d.moveInDate ? new Date(d.moveInDate) : null,
-        moveInFlexible: d.moveInFlexible ?? false,
-        sleepSchedule: d.sleepSchedule,
-        cleanliness: d.cleanliness,
-        smoking: d.smoking,
-        drinking: d.drinking,
-        roommatePref: d.roommatePref,
-        housingIntent: d.housingIntent,
-        onboardingCompleted: true,
-      },
+  // Note: Prisma v7 with pg adapter doesn't support interactive transactions.
+  // We use sequential queries instead (acceptable for onboarding — single user).
+
+  // 1. Upsert profile
+  await prisma.profile.upsert({
+    where: { id: user.id },
+    create: {
+      id: user.id,
+      fullName: user.user_metadata?.full_name || "",
+      occupation: d.occupation,
+      college: d.college,
+      company: d.company,
+      city: d.city,
+      country: d.country,
+      instagram: d.instagram,
+      bio: d.bio,
+      moveInDate: d.moveInDate ? new Date(d.moveInDate) : null,
+      moveInFlexible: d.moveInFlexible ?? false,
+      sleepSchedule: d.sleepSchedule,
+      cleanliness: d.cleanliness,
+      smoking: d.smoking,
+      drinking: d.drinking,
+      roommatePref: d.roommatePref,
+      housingIntent: d.housingIntent,
+      onboardingCompleted: true,
+    },
+    update: {
+      occupation: d.occupation,
+      college: d.college,
+      company: d.company,
+      city: d.city,
+      country: d.country,
+      instagram: d.instagram,
+      bio: d.bio,
+      moveInDate: d.moveInDate ? new Date(d.moveInDate) : null,
+      moveInFlexible: d.moveInFlexible ?? false,
+      sleepSchedule: d.sleepSchedule,
+      cleanliness: d.cleanliness,
+      smoking: d.smoking,
+      drinking: d.drinking,
+      roommatePref: d.roommatePref,
+      housingIntent: d.housingIntent,
+      onboardingCompleted: true,
+    },
+  })
+
+  // 2. Create / update listing if user has a room
+  if (d.housingIntent === "have_room") {
+    const existing = await prisma.listing.findFirst({
+      where: { ownerId: user.id },
     })
 
-    // 2. Create / update listing if user has a room
-    if (d.housingIntent === "have_room") {
-      const existing = await tx.listing.findFirst({
-        where: { ownerId: user.id },
+    const listingData = {
+      location: d.propLocation,
+      propertyType: d.propType,
+      roomType: d.propRoomType,
+      furnishing: d.propFurnishing,
+      occCurrent: d.occCurrent ?? 1,
+      occTotal: d.occTotal ?? 2,
+      occAvailable: d.occAvailable ?? 1,
+      rent: d.rent,
+      deposit: d.deposit,
+      moveInDate: d.propMoveInDate ? new Date(d.propMoveInDate) : null,
+      amenities: d.amenities ?? [],
+    }
+
+    let listingId: string
+
+    if (existing) {
+      await prisma.listing.update({ where: { id: existing.id }, data: listingData })
+      listingId = existing.id
+    } else {
+      const created = await prisma.listing.create({
+        data: { ownerId: user.id, ...listingData },
+      })
+      listingId = created.id
+    }
+
+    // 3. Persist co-roommate details
+    if (d.coRoommates && d.coRoommates.length > 0) {
+      // Delete existing co-roommates for this listing
+      await prisma.coRoommate.deleteMany({ where: { listingId } })
+
+      // Create new co-roommate entries
+      await prisma.coRoommate.createMany({
+        data: d.coRoommates.map((cr) => ({
+          listingId,
+          name: cr.name,
+          age: cr.age,
+          occupation: cr.occupation,
+          bio: cr.bio,
+          instagram: cr.instagram,
+        })),
       })
 
-      const listingData = {
-        location: d.propLocation,
-        propertyType: d.propType,
-        roomType: d.propRoomType,
-        furnishing: d.propFurnishing,
-        occCurrent: d.occCurrent ?? 1,
-        occTotal: d.occTotal ?? 2,
-        occAvailable: d.occAvailable ?? 1,
-        rent: d.rent,
-        deposit: d.deposit,
-        moveInDate: d.propMoveInDate ? new Date(d.propMoveInDate) : null,
-        amenities: d.amenities ?? [],
-      }
-
-      let listingId: string
-
-      if (existing) {
-        await tx.listing.update({ where: { id: existing.id }, data: listingData })
-        listingId = existing.id
-      } else {
-        const created = await tx.listing.create({
-          data: { ownerId: user.id, ...listingData },
-        })
-        listingId = created.id
-      }
-
-      // 3. Persist co-roommate details
-      if (d.coRoommates && d.coRoommates.length > 0) {
-        // Delete existing co-roommates for this listing
-        await tx.coRoommate.deleteMany({ where: { listingId } })
-
-        // Create new co-roommate entries
-        await tx.coRoommate.createMany({
-          data: d.coRoommates.map((cr) => ({
-            listingId,
-            name: cr.name,
-            age: cr.age,
-            occupation: cr.occupation,
-            bio: cr.bio,
-            instagram: cr.instagram,
-          })),
-        })
-
-        logger.info("co_roommates_saved", {
-          userId: user.id,
-          listingId,
-          count: d.coRoommates.length,
-        })
-      }
+      logger.info("co_roommates_saved", {
+        userId: user.id,
+        listingId,
+        count: d.coRoommates.length,
+      })
     }
-  })
+  }
 
   logger.info("onboarding_completed", { userId: user.id, intent: d.housingIntent })
   revalidatePath("/profile")
