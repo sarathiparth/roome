@@ -1,0 +1,860 @@
+"use client"
+
+import React, { useState, useCallback, useRef } from "react"
+import { motion, AnimatePresence, useMotionValue, useTransform, stagger, useAnimate } from "motion/react"
+import { useRouter } from "next/navigation"
+import {
+  MapPin, Briefcase, Filter, Search, Sparkles,
+  Users, Home, CheckCircle2, AlertTriangle, ChevronRight,
+  Moon, Coffee, Leaf, Dumbbell, Music2, BookOpen, Cigarette,
+  Wine, Sun, Laptop, Utensils, PawPrint, Minimize2
+} from "lucide-react"
+import { NavigationBar } from "@/components/navigation-bar"
+import { HoverBorderGradient, HoverBorderSyncProvider } from "@/components/ui/hover-border-gradient"
+import { ActivityDropdown } from "@/components/ui/activity-dropdown"
+
+// ─── Lifestyle icon map ────────────────────────────────────────────────────────
+const LIFESTYLE_ICONS: Record<string, React.ReactNode> = {
+  "Non-smoker":      <Leaf className="h-4 w-4" />,
+  "Smoker":          <Cigarette className="h-4 w-4" />,
+  "Social drinker":  <Wine className="h-4 w-4" />,
+  "Occasional drinks": <Wine className="h-4 w-4" />,
+  "Teetotaler":      <Leaf className="h-4 w-4" />,
+  "Night Owl":       <Moon className="h-4 w-4" />,
+  "Late nights":     <Moon className="h-4 w-4" />,
+  "Early Bird":      <Sun className="h-4 w-4" />,
+  "Early Riser":     <Sun className="h-4 w-4" />,
+  "WFH":             <Laptop className="h-4 w-4" />,
+  "Gamer":           <Dumbbell className="h-4 w-4" />,
+  "Yoga":            <Dumbbell className="h-4 w-4" />,
+  "Coffee addict":   <Coffee className="h-4 w-4" />,
+  "Reader":          <BookOpen className="h-4 w-4" />,
+  "Musician":        <Music2 className="h-4 w-4" />,
+  "Vegetarian":      <Utensils className="h-4 w-4" />,
+  "Plant parent":    <Leaf className="h-4 w-4" />,
+  "Minimalist":      <Minimize2 className="h-4 w-4" />,
+  "No pets":         <PawPrint className="h-4 w-4" />,
+  "Foodie":          <Utensils className="h-4 w-4" />,
+  "Homebody":        <Home className="h-4 w-4" />,
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface Person {
+  id: number
+  name: string
+  age: number
+  occupation: string
+  company: string
+  city: string
+  area: string
+  bio: string
+  imageUrl: string
+  matchScore: number
+  tags: string[]
+  budget: number
+  intent: "join_room" | "have_room" | "team_up"
+  prompts?: { question: string; answer: string }[]
+  lifestyle?: string[]
+}
+
+// ─── Mock data ────────────────────────────────────────────────────────────────
+const PEOPLE: Person[] = [
+  {
+    id: 1, name: "Priya Sharma", age: 23,
+    occupation: "UX Designer", company: "Flipkart",
+    city: "Bangalore", area: "HSR Layout",
+    bio: "Morning person who loves cooking and quiet evenings.",
+    imageUrl: "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800&auto=format&fit=crop&q=90",
+    matchScore: 94, tags: ["Early Bird", "Clean Freak", "Veggie"],
+    budget: 18000, intent: "join_room",
+    prompts: [
+      { question: "A typical Sunday", answer: "Meal prepping, a bit of reading, and maybe catching a movie." },
+      { question: "We'll get along if", answer: "You value an organized space and don't mind shared cooking sometimes!" }
+    ],
+    lifestyle: ["Non-smoker", "Occasional drinks", "No pets", "Vegetarian"],
+  },
+  {
+    id: 2, name: "Arjun Mehta", age: 26,
+    occupation: "Software Engineer", company: "Razorpay",
+    city: "Bangalore", area: "Koramangala",
+    bio: "Startup guy who codes late but keeps things clean.",
+    imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&auto=format&fit=crop&q=90",
+    matchScore: 87, tags: ["Night Owl", "Tidy", "Social"],
+    budget: 22000, intent: "join_room",
+    prompts: [
+      { question: "My most controversial opinion", answer: "Pineapple absolutely belongs on pizza." },
+      { question: "Ideal roommate vibe", answer: "Someone who respects quiet hours but is down for weekend gaming sessions." }
+    ],
+    lifestyle: ["Smoker", "Social drinker", "Late nights", "Gamer"],
+  },
+  {
+    id: 3, name: "Anika Verma", age: 24,
+    occupation: "Product Manager", company: "CRED",
+    city: "Bangalore", area: "Indiranagar",
+    bio: "Into yoga, minimal living, and having a beautiful home.",
+    imageUrl: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&auto=format&fit=crop&q=90",
+    matchScore: 81, tags: ["Yoga Lover", "Minimalist", "Quiet"],
+    budget: 25000, intent: "team_up",
+    prompts: [
+      { question: "My sanctuary is", answer: "A sunlit room filled with plants and good music." },
+      { question: "Must-haves in an apartment", answer: "Good natural light and a proper kitchen." }
+    ],
+    lifestyle: ["Non-smoker", "Teetotaler", "Yoga", "Plant parent"],
+  },
+  {
+    id: 4, name: "Rohan Das", age: 27,
+    occupation: "Data Scientist", company: "Meesho",
+    city: "Bangalore", area: "Whitefield",
+    bio: "Remote worker, loves music and cooking experimental dishes.",
+    imageUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&auto=format&fit=crop&q=90",
+    matchScore: 76, tags: ["WFH", "Foodie", "Chill"],
+    budget: 20000, intent: "join_room",
+    prompts: [
+      { question: "I'm looking for a roommate who", answer: "Is also working from home and understands the dynamic." },
+      { question: "On weekends you'll find me", answer: "Trying out a new cafe or producing music in my room." }
+    ],
+    lifestyle: ["WFH", "Musician", "Social drinker"],
+  },
+  {
+    id: 5, name: "Kavya Reddy", age: 25,
+    occupation: "Content Strategist", company: "Swiggy",
+    city: "Bangalore", area: "JP Nagar",
+    bio: "Bookworm by night, strategist by day. Good vibes only.",
+    imageUrl: "https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=800&auto=format&fit=crop&q=90",
+    matchScore: 89, tags: ["Bookworm", "Early Bird", "Homebody"],
+    budget: 16000, intent: "join_room",
+    prompts: [
+      { question: "First thing I do in the morning", answer: "Make a strong cup of filter coffee." },
+      { question: "I can teach you how to", answer: "Optimize your reading habits and brew the perfect coffee." }
+    ],
+    lifestyle: ["Early Riser", "Coffee addict", "Reader"],
+  },
+]
+
+// ─── Lookups ──────────────────────────────────────────────────────────────────
+const intentLabel: Record<string, string> = {
+  join_room: "Looking to join a room",
+  have_room: "Has a room",
+  team_up: "Team up",
+}
+const intentIcon: Record<string, React.ReactNode> = {
+  join_room: <Search className="h-3 w-3" />,
+  have_room: <Home className="h-3 w-3" />,
+  team_up: <Users className="h-3 w-3" />,
+}
+
+const LIFESTYLE_DETAILS: Record<string, string> = {
+  "Non-smoker": "Prefers smoke-free shared spaces",
+  "Smoker": "Smokes occasionally — usually outdoors",
+  "Social drinker": "Drinks on weekends or at events",
+  "Occasional drinks": "Drinks a few times a month",
+  "Teetotaler": "Doesn't drink at all",
+  "Night Owl": "Usually awake past midnight",
+  "Late nights": "Late-night work or gaming sessions",
+  "Early Bird": "Up by 7 AM most days",
+  "Early Riser": "Up by 6 AM, loves mornings",
+  "WFH": "Works from home full-time — values quiet space",
+  "Gamer": "Evening gaming sessions, headphones on",
+  "Yoga": "Morning yoga — needs a calm start to the day",
+  "Coffee addict": "Can't function without the first cup",
+  "Reader": "Books before bed — quiet evenings preferred",
+  "Musician": "Produces music in spare time",
+  "Vegetarian": "Strictly vegetarian diet",
+  "Plant parent": "Has plants everywhere — keeps things green",
+  "Minimalist": "Clutter-free environment is a must",
+  "No pets": "Prefers a pet-free home",
+  "Foodie": "Loves trying new cuisines and cooking",
+  "Homebody": "Happy staying in on weekends",
+}
+
+const PROMPT_ICONS: Record<string, string> = {
+  "A typical Sunday": "☀️",
+  "We'll get along if": "🤝",
+  "My most controversial opinion": "🔥",
+  "Ideal roommate vibe": "💭",
+  "My sanctuary is": "🏡",
+  "Must-haves in an apartment": "📋",
+  "I'm looking for a roommate who": "🎯",
+  "On weekends you'll find me": "🎵",
+  "First thing I do in the morning": "☕",
+  "I can teach you how to": "💡",
+}
+
+const TAG_PALETTES = [
+  { bg: "rgba(99,102,241,0.18)", border: "rgba(99,102,241,0.5)", text: "#a5b4fc", glow: "rgba(99,102,241,0.3)" },
+  { bg: "rgba(34,211,238,0.12)", border: "rgba(34,211,238,0.4)", text: "#67e8f9", glow: "rgba(34,211,238,0.25)" },
+  { bg: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.4)", text: "#6ee7b7", glow: "rgba(52,211,153,0.25)" },
+  { bg: "rgba(251,191,36,0.12)", border: "rgba(251,191,36,0.4)", text: "#fde68a", glow: "rgba(251,191,36,0.2)" },
+  { bg: "rgba(167,139,250,0.18)", border: "rgba(167,139,250,0.45)", text: "#c4b5fd", glow: "rgba(167,139,250,0.28)" },
+]
+
+// ─── Generate AI insights from person data ────────────────────────────────────
+function getInsights(person: Person): { pros: string[]; caution: string | null } {
+  const lf = person.lifestyle ?? []
+  const pros: string[] = []
+  let caution: string | null = null
+
+  if (lf.includes("Non-smoker")) pros.push("Smoke-free home")
+  if (lf.includes("Early Bird") || lf.includes("Early Riser")) pros.push("Synced morning schedule")
+  if (lf.includes("WFH")) pros.push("Work-from-home compatible")
+  if (lf.includes("Vegetarian")) pros.push("Vegetarian-friendly kitchen")
+  if (lf.includes("Minimalist") || lf.includes("Clean Freak")) pros.push("Values clean shared spaces")
+  if (lf.includes("Teetotaler")) pros.push("Sober home environment")
+  if (lf.includes("Homebody")) pros.push("Low-traffic, calm home life")
+  if (pros.length < 2 && person.matchScore >= 85) pros.push("High lifestyle compatibility")
+  if (pros.length < 2) pros.push("Budget aligns with your range")
+
+  if (lf.includes("Night Owl") || lf.includes("Late nights")) caution = "May have different sleep schedules"
+  else if (lf.includes("Smoker")) caution = "Smoker — check ventilation compatibility"
+  else if (lf.includes("Gamer")) caution = "Occasional noisy gaming sessions"
+
+  return { pros: pros.slice(0, 3), caution }
+}
+
+// ─── Enhanced animated match score ring ───────────────────────────────────────
+function MatchScoreHero({ score }: { score: number }) {
+  const r = 52
+  const circ = 2 * Math.PI * r
+  const offset = circ - (score / 100) * circ
+  const color = score >= 90 ? "#34d399" : score >= 80 ? "#818cf8" : "#fbbf24"
+  const label = score >= 90 ? "Excellent match" : score >= 80 ? "Great match" : "Good match"
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative flex items-center justify-center w-32 h-32">
+        {/* Pulse glow */}
+        <motion.div
+          className="absolute inset-0 rounded-full"
+          animate={{ opacity: [0.3, 0.7, 0.3], scale: [1, 1.12, 1] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+          style={{ background: `radial-gradient(circle, ${color}30 0%, transparent 70%)` }}
+        />
+        <svg className="absolute inset-0 -rotate-90 w-full h-full" viewBox="0 0 120 120" fill="none">
+          <circle cx="60" cy="60" r={r} stroke="rgba(255,255,255,0.07)" strokeWidth="5" />
+          <motion.circle
+            cx="60" cy="60" r={r}
+            stroke={color}
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray={circ}
+            initial={{ strokeDashoffset: circ }}
+            animate={{ strokeDashoffset: offset }}
+            transition={{ duration: 1.6, ease: "easeOut", delay: 0.3 }}
+            fill="none"
+            style={{ filter: `drop-shadow(0 0 8px ${color}80)` }}
+          />
+        </svg>
+        <div className="flex flex-col items-center z-10">
+          <motion.span
+            className="font-black text-3xl text-white leading-none"
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5, type: "spring", stiffness: 300 }}
+          >
+            {score}
+          </motion.span>
+          <span className="text-white/40 text-[10px] font-bold uppercase tracking-widest">match</span>
+        </div>
+      </div>
+      <motion.span
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 1 }}
+        className="text-xs font-semibold"
+        style={{ color }}
+      >
+        {label}
+      </motion.span>
+    </div>
+  )
+}
+
+// ─── Animated floating tag pill ───────────────────────────────────────────────
+function FloatingTag({ label, index, delay }: { label: string; index: number; delay: number }) {
+  const p = TAG_PALETTES[index % TAG_PALETTES.length]
+  return (
+    <motion.span
+      initial={{ opacity: 0, y: 12, scale: 0.85 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay, type: "spring", stiffness: 320, damping: 24 }}
+      className="px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap cursor-default"
+      style={{
+        background: p.bg,
+        border: `1px solid ${p.border}`,
+        color: p.text,
+        boxShadow: `0 0 14px ${p.glow}`,
+      }}
+      whileHover={{ scale: 1.08, boxShadow: `0 0 22px ${p.glow}` }}
+    >
+      {label}
+    </motion.span>
+  )
+}
+
+// ─── Expandable lifestyle tag ─────────────────────────────────────────────────
+function ExpandableTag({ label, index }: { label: string; index: number }) {
+  const [open, setOpen] = useState(false)
+  const detail = LIFESTYLE_DETAILS[label]
+  const p = TAG_PALETTES[index % TAG_PALETTES.length]
+
+  return (
+    <motion.button
+      layout
+      onClick={() => setOpen(v => !v)}
+      className="flex items-start gap-2 w-full text-left rounded-2xl px-3.5 py-2.5 transition-all"
+      style={{
+        background: open ? p.bg : "rgba(255,255,255,0.04)",
+        border: `1px solid ${open ? p.border : "rgba(255,255,255,0.09)"}`,
+        boxShadow: open ? `0 0 18px ${p.glow}` : "none",
+      }}
+      whileTap={{ scale: 0.97 }}
+      whileHover={{ background: p.bg }}
+    >
+      <span className="text-xs font-semibold mt-0.5 flex-shrink-0" style={{ color: open ? p.text : "rgba(255,255,255,0.7)" }}>
+        {label}
+      </span>
+      <div className="ml-auto flex-shrink-0 mt-0.5">
+        <motion.div animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronRight className="h-3 w-3 text-white/30" />
+        </motion.div>
+      </div>
+      <AnimatePresence>
+        {open && detail && (
+          <motion.span
+            key="detail"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="text-[11px] text-white/50 leading-relaxed block"
+            style={{ color: p.text }}
+          >
+            {detail}
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </motion.button>
+  )
+}
+
+// ─── AI Insight card ──────────────────────────────────────────────────────────
+function AIInsightCard({ person }: { person: Person }) {
+  const { pros, caution } = getInsights(person)
+
+  return (
+    <div className="w-full flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <motion.div
+          animate={{ opacity: [0.6, 1, 0.6] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        >
+          <Sparkles className="h-3.5 w-3.5" style={{ color: "#f59e0b" }} />
+        </motion.div>
+        <h3
+          className="text-[10px] uppercase font-black tracking-widest"
+          style={{ color: "rgba(245,158,11,0.7)" }}
+        >
+          AI Match Insight
+        </h3>
+      </div>
+
+      {/* Divider with golden tint */}
+      <div
+        className="w-full h-px rounded-full"
+        style={{ background: "linear-gradient(90deg, transparent, rgba(245,158,11,0.4), transparent)" }}
+      />
+
+      <div className="flex flex-col gap-2.5">
+        {pros.map((pro, i) => (
+          <motion.div
+            key={pro}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3 + i * 0.1 }}
+            className="flex items-center gap-2.5"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "#f59e0b" }} />
+            <span className="text-white/75 text-[13px]">{pro}</span>
+          </motion.div>
+        ))}
+        {caution && (
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.5 }}
+            className="flex items-start gap-2.5 mt-0.5"
+          >
+            <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" style={{ color: "rgba(245,158,11,0.55)" }} />
+            <span className="text-[12px]" style={{ color: "rgba(245,158,11,0.6)" }}>{caution}</span>
+          </motion.div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Hero info card (bio + tags + score + intent) ────────────────────────────
+function HeroInfoCard({ person }: { person: Person }) {
+  const scoreColor = person.matchScore >= 90 ? "#34d399" : person.matchScore >= 80 ? "#818cf8" : "#fbbf24"
+
+  return (
+    <div className="w-full flex flex-col gap-4">
+      {/* Match score hero — centred above everything */}
+      <div className="flex justify-center pt-1">
+        <MatchScoreHero score={person.matchScore} />
+      </div>
+
+      {/* Animated gradient glow strip */}
+      <motion.div
+        className="w-full h-px rounded-full"
+        style={{
+          background: `linear-gradient(90deg, transparent, ${scoreColor}80, transparent)`,
+        }}
+        animate={{ opacity: [0.4, 1, 0.4] }}
+        transition={{ duration: 2.5, repeat: Infinity }}
+      />
+
+      {/* Bio — quote style */}
+      <motion.p
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="text-white/90 text-[17px] leading-relaxed font-medium italic text-center px-2"
+        style={{ textShadow: "0 1px 20px rgba(255,255,255,0.08)" }}
+      >
+        &ldquo;{person.bio}&rdquo;
+      </motion.p>
+
+      {/* Floating tags */}
+      <div className="flex flex-wrap gap-2 justify-center">
+        {person.tags.map((t, i) => (
+          <FloatingTag key={t} label={t} index={i} delay={0.5 + i * 0.12} />
+        ))}
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-white/[0.07]" />
+
+      {/* Intent + budget */}
+      <div className="flex items-center justify-between">
+        <div
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
+        >
+          <span className="text-white/50 flex">{intentIcon[person.intent]}</span>
+          <span className="text-white/60 text-[11px] font-semibold">{intentLabel[person.intent]}</span>
+        </div>
+        <div className="flex flex-col items-end">
+          <span className="text-white font-black text-lg leading-none">
+            ₹{person.budget.toLocaleString("en-IN")}
+          </span>
+          <span className="text-white/35 text-[10px]">per month</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Prompt card with icon ────────────────────────────────────────────────────
+function PromptCard({ question, answer }: { question: string; answer: string }) {
+  const icon = PROMPT_ICONS[question] ?? "💬"
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <span className="text-base leading-none">{icon}</span>
+        <h3 className="text-white/40 text-[10px] uppercase font-black tracking-widest">{question}</h3>
+      </div>
+      <p className="text-white/90 text-[16px] leading-relaxed font-medium">{answer}</p>
+    </div>
+  )
+}
+
+// ─── Swipe Card ───────────────────────────────────────────────────────────────
+function SwipeCard({
+  person, onSwipe, isTop, zIndex,
+}: {
+  person: Person
+  onSwipe: (dir: "left" | "right" | "super") => void
+  isTop: boolean
+  zIndex: number
+}) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [tiltStyle, setTiltStyle] = useState<React.CSSProperties>({})
+  const scoreColor = person.matchScore >= 90 ? "#34d399" : person.matchScore >= 80 ? "#818cf8" : "#fbbf24"
+
+  const x = useMotionValue(0)
+  const rotate = useTransform(x, [-220, 220], [-16, 16])
+  const likeOpacity = useTransform(x, [35, 110], [0, 1])
+  const nopeOpacity = useTransform(x, [-110, -35], [1, 0])
+
+  // Dynamic green/red glow based on drag direction (using opacity which is GPU accelerated, not background color)
+  const rightOpacity = useTransform(x, [0, 110], [0, 1])
+  const leftOpacity = useTransform(x, [-110, 0], [1, 0])
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isTop || !cardRef.current) return
+    const { left, top, width, height } = cardRef.current.getBoundingClientRect()
+    const rx = ((e.clientY - top - height / 2) / (height / 2)) * -5
+    const ry = ((e.clientX - left - width / 2) / (width / 2)) * 5
+    setTiltStyle({
+      transform: `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) scale3d(1.015,1.015,1.015)`,
+      transition: "transform 0.08s ease-out",
+    })
+  }
+
+  const handleMouseLeave = () => {
+    setTiltStyle({
+      transform: "perspective(900px) rotateX(0deg) rotateY(0deg) scale3d(1,1,1)",
+      transition: "transform 0.4s ease-in-out",
+    })
+  }
+
+  const handleDragEnd = (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
+    if (!isTop) return
+    if (info.offset.x > 80 || info.velocity.x > 400) onSwipe("right")
+    else if (info.offset.x < -80 || info.velocity.x < -400) onSwipe("left")
+  }
+
+  return (
+    <motion.div
+      ref={cardRef}
+      className="absolute inset-0"
+      style={{ x: isTop ? x : 0, rotate: isTop ? rotate : 0, zIndex, ...(!isTop ? {} : tiltStyle), transformStyle: "preserve-3d", willChange: isTop ? "transform" : "auto" }}
+      drag={isTop ? "x" : false}
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.8}
+      dragDirectionLock
+      onDragEnd={handleDragEnd}
+      onMouseMove={isTop ? handleMouseMove : undefined}
+      onMouseLeave={isTop ? handleMouseLeave : undefined}
+      initial={{ scale: isTop ? 1 : 0.94, y: isTop ? 0 : 22 }}
+      animate={{ scale: isTop ? 1 : 0.94, y: isTop ? 0 : 22 }}
+      transition={{ type: "spring", stiffness: 280, damping: 28 }}
+    >
+      {/* Card shell */}
+      <div className="relative w-full h-full md:rounded-[32px] rounded-[20px] overflow-hidden shadow-2xl bg-[#080808]">
+
+        {/* Edge light reflection */}
+        <div
+          className="absolute inset-0 pointer-events-none z-[5] rounded-[inherit]"
+          style={{
+            background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.03) 100%)",
+          }}
+        />
+
+        {/* Dynamic swipe color glow */}
+        {isTop && (
+          <>
+            <motion.div
+              className="absolute inset-0 z-[4] pointer-events-none rounded-[inherit] bg-emerald-400/20"
+              style={{ opacity: rightOpacity }}
+            />
+            <motion.div
+              className="absolute inset-0 z-[4] pointer-events-none rounded-[inherit] bg-red-500/20"
+              style={{ opacity: leftOpacity }}
+            />
+          </>
+        )}
+
+        {/* Scrollable inner */}
+        <div
+          ref={scrollRef}
+          className="absolute inset-0 overflow-y-auto overflow-x-hidden"
+          style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+          onPointerDown={e => e.stopPropagation()}
+        >
+          {/* ── Hero photo ── */}
+          <div className="relative w-full flex-shrink-0" style={{ height: "68vh", minHeight: 360 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={person.imageUrl}
+              alt={person.name}
+              className="absolute inset-0 w-full h-full object-cover object-top select-none"
+              draggable={false}
+            />
+
+            {/* Cinematic gradient */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.3) 60%, rgba(8,8,8,0.97) 100%)",
+              }}
+            />
+
+            {/* Ambient score glow on photo */}
+            <div
+              className="absolute bottom-0 inset-x-0 h-40 pointer-events-none"
+              style={{ background: `radial-gradient(ellipse at 50% 100%, ${scoreColor}18 0%, transparent 70%)` }}
+            />
+
+            {/* Match badge */}
+            <div className="absolute top-16 right-4 z-10">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.7, y: -8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ delay: 0.3, type: "spring", stiffness: 300 }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full backdrop-blur-xl border"
+                style={{
+                  background: "rgba(0,0,0,0.55)",
+                  borderColor: `${scoreColor}55`,
+                  boxShadow: `0 0 16px ${scoreColor}50`,
+                }}
+              >
+                <Sparkles className="h-3 w-3" style={{ color: scoreColor }} />
+                <span className="text-xs font-black" style={{ color: scoreColor }}>
+                  {person.matchScore}% Match
+                </span>
+              </motion.div>
+            </div>
+
+            {/* Name overlay */}
+            <div className="absolute bottom-5 left-5 right-5 pointer-events-none z-10">
+              <motion.h2
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="text-white font-black text-[30px] leading-none"
+                style={{ textShadow: "0 2px 20px rgba(0,0,0,0.8)" }}
+              >
+                {person.name}
+                <span className="font-light text-white/45 ml-2.5 text-2xl">{person.age}</span>
+              </motion.h2>
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+                className="flex flex-col gap-0.5 mt-2"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Briefcase className="h-3.5 w-3.5 text-white/40 flex-shrink-0" />
+                  <span className="text-white/65 text-[13px]">{person.occupation} · {person.company}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-white/35 flex-shrink-0" />
+                  <span className="text-white/45 text-[13px]">{person.area}, {person.city}</span>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+
+          {/* ── Scrollable profile details ── */}
+          <div
+            className="px-4 pt-5 pb-16 flex flex-col gap-3"
+            style={{ background: "linear-gradient(to bottom, #080808, #050505)" }}
+          >
+            <HoverBorderSyncProvider duration={1.8}>
+
+              {/* 1. Hero info card */}
+              <HoverBorderGradient
+                containerClassName="w-full"
+                className="px-5 py-6 flex flex-col gap-4"
+                style={{ background: "rgba(255,255,255,0.03)" }}
+              >
+                <HeroInfoCard person={person} />
+              </HoverBorderGradient>
+
+              {/* 2. AI Insight card — golden accent, synced border */}
+              <HoverBorderGradient
+                containerClassName="w-full"
+                className="px-5 py-5 flex flex-col gap-3"
+                style={{ background: "rgba(0,0,0,0.6)", boxShadow: "0 0 24px rgba(245,158,11,0.08)" }}
+              >
+                <AIInsightCard person={person} />
+              </HoverBorderGradient>
+
+              {/* 3. Lifestyle & Habits — dropdown */}
+              {person.lifestyle && (() => {
+                const items = person.lifestyle.map((label, i) => ({
+                  id: i + 1,
+                  icon: LIFESTYLE_ICONS[label] ?? <Leaf className="h-4 w-4" />,
+                  title: label,
+                  description: LIFESTYLE_DETAILS[label],
+                }))
+                return (
+                  <HoverBorderGradient
+                    containerClassName="w-full"
+                    className=""
+                    style={{ background: "transparent" }}
+                  >
+                    <ActivityDropdown
+                      headerIcon={<Leaf className="h-5 w-5" />}
+                      title="Lifestyle & Habits"
+                      subtitle={`${items.length} habits · tap to explore`}
+                      items={items}
+                      defaultOpen={false}
+                    />
+                  </HoverBorderGradient>
+                )
+              })()}
+
+              {/* 4. Prompt cards */}
+              {person.prompts && person.prompts.map((p, idx) => (
+                <HoverBorderGradient
+                  key={idx}
+                  containerClassName="w-full"
+                  className="px-5 py-5"
+                  style={{ background: "rgba(255,255,255,0.025)" }}
+                >
+                  <PromptCard question={p.question} answer={p.answer} />
+                </HoverBorderGradient>
+              ))}
+
+            </HoverBorderSyncProvider>
+
+            <div className="h-4" />
+          </div>
+        </div>
+
+        {/* ── LIKE / NOPE stamps ── */}
+        {isTop && (
+          <div className="pointer-events-none inset-0 absolute overflow-hidden rounded-[inherit] z-20">
+            <motion.div style={{ opacity: likeOpacity, willChange: "opacity" }} className="absolute top-28 left-6 rotate-[-18deg]">
+              <div className="border-[3px] border-emerald-400 rounded-2xl px-4 py-2 bg-emerald-400/20 shadow-[0_0_30px_rgba(52,211,153,0.4)]">
+                <span className="text-emerald-400 font-black text-4xl tracking-widest uppercase drop-shadow-xl">LIKE</span>
+              </div>
+            </motion.div>
+            <motion.div style={{ opacity: nopeOpacity, willChange: "opacity" }} className="absolute top-28 right-6 rotate-[18deg]">
+              <div className="border-[3px] border-red-500 rounded-2xl px-4 py-2 bg-red-400/20 shadow-[0_0_30px_rgba(239,68,68,0.4)]">
+                <span className="text-red-500 font-black text-4xl tracking-widest uppercase drop-shadow-xl">NOPE</span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── Empty state ──────────────────────────────────────────────────────────────
+function EmptyState({ onReset }: { onReset: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="flex flex-col items-center justify-center h-full gap-6 px-8 text-center"
+    >
+      <motion.div
+        animate={{ scale: [1, 1.07, 1] }}
+        transition={{ duration: 2.5, repeat: Infinity }}
+        className="h-24 w-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center"
+      >
+        <Sparkles className="h-10 w-10 text-white/30" />
+      </motion.div>
+      <div className="space-y-2">
+        <h2 className="text-2xl font-black text-white">All caught up!</h2>
+        <p className="text-white/40 text-sm leading-relaxed">
+          You&apos;ve seen everyone nearby. Check back later or adjust your filters.
+        </p>
+      </div>
+      <motion.button
+        whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}
+        onClick={onReset}
+        className="px-6 py-3 rounded-2xl bg-white text-black font-bold text-sm shadow-xl"
+      >
+        Start Over ↺
+      </motion.button>
+    </motion.div>
+  )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+export default function ExplorePage() {
+  const router = useRouter()
+  const [queue, setQueue] = useState<Person[]>(PEOPLE)
+  const [lastAction, setLastAction] = useState<{ name: string; dir: string } | null>(null)
+  const [showToast, setShowToast] = useState(false)
+
+  const topPerson = queue[0]
+  const secondPerson = queue[1]
+
+  const handleSwipe = useCallback((dir: "left" | "right" | "super") => {
+    if (!topPerson) return
+    const label = dir === "right" ? "❤️ Liked" : dir === "super" ? "⚡ Super Like" : "✕ Passed"
+    setLastAction({ name: topPerson.name, dir: label })
+    setShowToast(true)
+    setTimeout(() => setShowToast(false), 2000)
+    setQueue(q => q.slice(1))
+  }, [topPerson])
+
+  return (
+    <main className="fixed inset-0 bg-[#050505] overflow-hidden">
+      {/* Layered ambient glow */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          background:
+            "radial-gradient(ellipse at 20% 0%, rgba(99,102,241,0.1) 0%, transparent 50%), radial-gradient(ellipse at 85% 15%, rgba(52,211,153,0.06) 0%, transparent 50%), radial-gradient(ellipse at 50% 100%, rgba(99,102,241,0.05) 0%, transparent 60%)",
+        }}
+      />
+
+      <NavigationBar />
+
+      {/* Header */}
+      <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-5 pt-12 pb-4 pointer-events-none"
+        style={{ background: "linear-gradient(to bottom, rgba(5,5,5,0.95) 0%, rgba(5,5,5,0.6) 70%, transparent 100%)" }}>
+        <div className="pointer-events-auto">
+          <h1 className="text-3xl font-black text-white tracking-tight">People</h1>
+          <p className="text-white/50 text-sm mt-0.5">
+            {queue.length > 0 ? `${queue.length} nearby · Bangalore` : "No more profiles"}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 pointer-events-auto">
+          <motion.button
+            whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}
+            className="h-11 w-11 rounded-full flex items-center justify-center border border-white/12 bg-black/40 backdrop-blur-xl text-white hover:bg-white/15 transition-all shadow-xl"
+          >
+            <Filter className="h-5 w-5" />
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}
+            onClick={() => router.push("/profile")}
+            className="h-11 w-11 rounded-full flex items-center justify-center border border-white/12 bg-black/40 backdrop-blur-xl text-white hover:bg-white/15 transition-all shadow-xl"
+          >
+            <Search className="h-5 w-5" />
+          </motion.button>
+        </div>
+      </div>
+
+      {/* Card stack */}
+      <div className="absolute inset-0 pb-[80px] pt-0 px-0 md:px-4 flex justify-center overflow-hidden">
+        <div className="relative w-full h-full max-w-[480px]">
+          <AnimatePresence>
+            {queue.length === 0 ? (
+              <motion.div key="empty" className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <EmptyState onReset={() => setQueue(PEOPLE)} />
+              </motion.div>
+            ) : (
+              <>
+                {secondPerson && (
+                  <SwipeCard key={`back-${secondPerson.id}`} person={secondPerson} onSwipe={handleSwipe} isTop={false} zIndex={10} />
+                )}
+                <SwipeCard key={`top-${topPerson.id}`} person={topPerson} onSwipe={handleSwipe} isTop={true} zIndex={20} />
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Toast */}
+      <AnimatePresence>
+        {showToast && lastAction && (
+          <motion.div
+            key="toast"
+            initial={{ opacity: 0, y: -20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 420, damping: 30 }}
+            className="absolute top-32 inset-x-0 flex justify-center z-50 pointer-events-none"
+          >
+            <div
+              className="px-6 py-3 rounded-2xl border border-white/20 backdrop-blur-2xl text-sm font-bold text-white tracking-wide"
+              style={{ background: "rgba(0,0,0,0.5)", boxShadow: "0 10px 40px rgba(0,0,0,0.8)" }}
+            >
+              {lastAction.dir} {lastAction.name.split(" ")[0]}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </main>
+  )
+}

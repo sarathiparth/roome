@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Profiles ────────────────────────────────────────────────────────────────
+// Created automatically via Postgres trigger on auth.users insert.
+// id mirrors auth.users.id (uuid).
+model Profile {
+  id                   String    @id @db.Uuid
+  fullName             String?   @map("full_name")
+  avatarUrl            String?   @map("avatar_url")
+  dob                  DateTime? @db.Date
+  gender               String?
+  occupation           String?
+  college              String?
+  company              String?
+  city                 String?
+  country              String?
+  instagram            String?
+  bio                  String?
+  moveInDate           DateTime? @map("move_in_date") @db.Date
+  moveInFlexible       Boolean   @default(false) @map("move_in_flexible")
+  sleepSchedule        String?   @map("sleep_schedule")
+  cleanliness          String?
+  smoking              String?
+  drinking             String?
+  roommatePref         String?   @map("roommate_gender_pref")
+  housingIntent        String?   @map("housing_intent")
+  budget               Int?
+  tags                 String[]
+  vibeCompleted        Boolean   @default(false) @map("vibe_completed")
+  onboardingCompleted  Boolean   @default(false) @map("onboarding_completed")
+  hasPet               Boolean?  @map("has_pet")
+  petDescription       String?   @map("pet_description")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  listings             Listing[]
+  swipesGiven          Swipe[]              @relation("swiper")
+  swipesReceived       Swipe[]              @relation("swiped")
+  matchesAsA           Match[]              @relation("matchA")
+  matchesAsB           Match[]              @relation("matchB")
+  messagesSent         Message[]
+  vibeResponse         VibeResponse?
+  notifications        Notification[]
+
+  @@map("profiles")
+}
+
+// ─── Listings ────────────────────────────────────────────────────────────────
+model Listing {
+  id           String    @id @default(uuid()) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  owner        Profile   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  location     String?
+  propertyType String?   @map("property_type")
+  roomType     String?   @map("room_type")
+  furnishing   String?
+  occCurrent   Int       @default(1) @map("occ_current")
+  occTotal     Int       @default(2) @map("occ_total")
+  occAvailable Int       @default(1) @map("occ_available")
+  rent         Int?
+  deposit      Int?
+  moveInDate   DateTime? @map("move_in_date") @db.Date
+  amenities    String[]
+  photos       String[]
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  coRoommates  CoRoommate[]
+
+  @@map("listings")
+}
+
+// ─── Co-Roommate profiles (existing tenants) ─────────────────────────────────
+model CoRoommate {
+  id         String  @id @default(uuid()) @db.Uuid
+  listingId  String  @map("listing_id") @db.Uuid
+  listing    Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  name       String
+  age        Int?
+  occupation String?
+  bio        String?
+  instagram  String?
+
+  @@map("co_roommates")
+}
+
+// ─── Swipes ──────────────────────────────────────────────────────────────────
+model Swipe {
+  id        String   @id @default(uuid()) @db.Uuid
+  swiperId  String   @map("swiper_id") @db.Uuid
+  swipedId  String   @map("swiped_id") @db.Uuid
+  direction String   // like | pass | super
+  createdAt DateTime @default(now()) @map("created_at")
+
+  swiper    Profile  @relation("swiper", fields: [swiperId], references: [id], onDelete: Cascade)
+  swiped    Profile  @relation("swiped", fields: [swipedId], references: [id], onDelete: Cascade)
+
+  @@unique([swiperId, swipedId])
+  @@map("swipes")
+}
+
+// ─── Matches ─────────────────────────────────────────────────────────────────
+model Match {
+  id        String    @id @default(uuid()) @db.Uuid
+  userA     String    @map("user_a") @db.Uuid
+  userB     String    @map("user_b") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  profileA  Profile   @relation("matchA", fields: [userA], references: [id], onDelete: Cascade)
+  profileB  Profile   @relation("matchB", fields: [userB], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@unique([userA, userB])
+  @@map("matches")
+}
+
+// ─── Messages ─────────────────────────────────────────────────────────────────
+model Message {
+  id        String    @id @default(uuid()) @db.Uuid
+  matchId   String    @map("match_id") @db.Uuid
+  match     Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  senderId  String    @map("sender_id") @db.Uuid
+  sender    Profile   @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content   String
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("messages")
+}
+
+// ─── Vibe Responses ───────────────────────────────────────────────────────────
+model VibeResponse {
+  userId    String   @id @map("user_id") @db.Uuid
+  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  responses Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("vibe_responses")
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String    // match | like | message | super
+  payload   Json      @default("{}")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("notifications")
+}

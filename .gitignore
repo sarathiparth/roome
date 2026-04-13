@@ -39,3 +39,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma
+
+# MCP config (may contain tokens)
+.mcp.json
+
+# ML training artifacts
+catboost_info/
+ml_models/
+ml_output.log
+
+# Agent/IDE config
+.agents/
+.claude/
+skills-lock.json
+
+# Temp scripts
+tmp_update.js

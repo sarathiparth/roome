@@ -123,8 +123,71 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-color: #ffffff !important;
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer utilities {
+  @keyframes liquidBorder {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  .liquid-metallic-border {
+    border: 1.5px solid transparent !important;
+    background: 
+      linear-gradient(#161616, #0a0a0a) padding-box,
+      linear-gradient(110deg, #333 0%, #ddd 20%, #222 40%, #bbb 60%, #111 80%, #ccc 100%) border-box !important;
+    background-size: 300% 300% !important;
+    animation: liquidBorder 8s ease infinite;
+    box-shadow: inset 0px 4px 6px rgba(0, 0, 0, 0.5), inset 0px 1px 3px rgba(0, 0, 0, 0.4) !important;
+  }
+}
+
+/* ── Animated Gradient Border ─────────────────────────────────────────────── */
+
+@property --gradient-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes gradient-rotate {
+  from { --gradient-angle: 0deg; }
+  to   { --gradient-angle: 360deg; }
+}
+
+.gradient-border-component {
+  position: relative;
+}
+
+/* Always spinning */
+.gradient-border-auto {
+  animation: gradient-rotate var(--animation-duration, 5s) linear infinite;
+}
+
+/* Spins only on hover */
+.gradient-border-hover {
+  animation: none;
+}
+.gradient-border-hover:hover {
+  animation: gradient-rotate var(--animation-duration, 5s) linear infinite;
+}
+
+/* Spins normally, pauses on hover */
+.gradient-border-stop-hover {
+  animation: gradient-rotate var(--animation-duration, 5s) linear infinite;
+}
+.gradient-border-stop-hover:hover {
+  animation-play-state: paused;
+}
+
+@layer utilities {
+  .transform-style-3d {
+    transform-style: preserve-3d;
   }
 }
